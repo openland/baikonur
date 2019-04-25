@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	model := ClientModel{
+	model := &ClientModel{
 		Fragments:     make(map[string]*ast.FragmentDefinition),
 		Queries:       make(map[string]*ast.OperationDefinition),
 		Mutations:     make(map[string]*ast.OperationDefinition),
@@ -63,6 +63,11 @@ func main() {
 				} else {
 					panic("Unknown operation: " + op.Operation)
 				}
+			} else if node.GetKind() == "FragmentDefinition" {
+				fr := node.(*ast.FragmentDefinition)
+				model.Fragments[fr.Name.Value] = fr
+			} else {
+				panic("Unknown node: " + node.GetKind())
 			}
 		}
 	}
