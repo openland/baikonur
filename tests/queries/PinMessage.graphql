@@ -1,0 +1,6 @@
+mutation PinMessage($chatId: ID!, $messageId: ID!) {
+  pinMessage: betaPinMessage(chatId: $chatId, messageId: $messageId) {
+    __typename
+    ...RoomShort
+  }
+}

@@ -1,0 +1,23 @@
+query AccountInviteInfo($inviteKey: String!) {
+  invite: alphaInviteInfo(key: $inviteKey) {
+    __typename
+    creator {
+      __typename
+      ...UserShort
+    }
+    forEmail
+    forName
+    id
+    joined
+    key
+    membersCount
+    orgId
+    organization {
+      __typename
+      about
+      isCommunity: alphaIsCommunity
+    }
+    photo
+    title
+  }
+}

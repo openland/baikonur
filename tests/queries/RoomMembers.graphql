@@ -1,0 +1,12 @@
+query RoomMembers($roomId: ID!) {
+  members: roomMembers(roomId: $roomId) {
+    __typename
+    canKick
+    membership
+    role
+    user {
+      __typename
+      ...UserShort
+    }
+  }
+}
