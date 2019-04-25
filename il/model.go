@@ -46,6 +46,7 @@ type SelectionField struct {
 	Alias     string
 	Type      Type
 	Selection *SelectionSet
+	Arguments []*Argument
 }
 
 // Operation
@@ -53,4 +54,22 @@ type Operation struct {
 	Type         string
 	Name         string
 	SelectionSet *SelectionSet
+	Variables    *Variables
+}
+
+// Variables
+type Variables struct {
+	Variables []*Variable
+}
+
+type Variable struct {
+	Name         string
+	Type         Type
+	DefaultValue *Value
+}
+
+// Arguments
+type Argument struct {
+	Name  string
+	Value Value
 }

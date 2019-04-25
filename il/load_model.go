@@ -6,6 +6,7 @@ import (
 	"github.com/graphql-go/graphql/language/parser"
 	"github.com/graphql-go/graphql/language/source"
 	"io/ioutil"
+	"strconv"
 )
 
 type ClientModel struct {
@@ -86,12 +87,76 @@ func prepareFragment(fragment *ast.FragmentDefinition, model *Model, clModel *Cl
 
 // Operations
 
+func convertValue(value ast.Value) Value {
+	if value.GetKind() == "Variable" {
+		return VariableValue{(value.(*ast.Variable)).Name.Value}
+	} else if value.GetKind() == "IntValue" {
+		iv := value.(*ast.IntValue)
+		v, e := strconv.ParseInt(iv.Value, 10, 32)
+		if e != nil {
+			panic(e)
+		}
+		return IntValue{int32(v)}
+	} else if value.GetKind() == "FloatValue" {
+		iv := value.(*ast.FloatValue)
+		v, e := strconv.ParseFloat(iv.Value, 64)
+		if e != nil {
+			panic(e)
+		}
+		return FloatValue{v}
+	} else if value.GetKind() == "StringValue" {
+		iv := value.(*ast.StringValue)
+		return StringValue{iv.Value}
+	} else if value.GetKind() == "BooleanValue" {
+		iv := value.(*ast.BooleanValue)
+		return BooleanValue{iv.Value}
+	} else if value.GetKind() == "EnumValue" {
+		iv := value.(*ast.EnumValue)
+		return EnumValue{iv.Value}
+	} else if value.GetKind() == "ListValue" {
+		iv := value.(*ast.ListValue)
+		lv := make([]Value, 0)
+		for i := range iv.Values {
+			lv = append(lv, convertValue(iv.Values[i]))
+		}
+		return ListValue{lv}
+	} else if value.GetKind() == "ObjectValue" {
+		ov := value.(*ast.ObjectValue)
+		fld := make([]ObjectValueField, 0)
+		for i := range ov.Fields {
+			fld = append(fld, ObjectValueField{ov.Fields[i].Name.Value, convertValue(ov.Fields[i].Value)})
+		}
+		return ObjectValue{fld}
+	} else {
+		panic("Unknown value kind: " + value.GetKind())
+	}
+}
+
+func convertVariables(variables []*ast.VariableDefinition, model *Model, clModel *ClientModel) *Variables {
+	res := make([]*Variable, 0)
+	for i := range variables {
+		tp := convertInputType(variables[i].Type, model, clModel)
+		var vl *Value
+		if variables[i].DefaultValue != nil {
+			vl2 := convertValue(variables[i].DefaultValue)
+			vl = &vl2
+		}
+		vr := &Variable{Name: variables[i].Variable.Name.Value, Type: tp, DefaultValue: vl}
+		res = append(res, vr)
+	}
+	return &Variables{res}
+}
+
 func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel *ClientModel) {
 	root := clModel.Schema.QueryType.Name
 	if definition.Operation == "mutation" {
 		root = clModel.Schema.MutationType.Name
 	} else if definition.Operation == "subscription" {
 		root = clModel.Schema.SubscriptionType.Name
+	}
+	variables := &Variables{}
+	if definition.VariableDefinitions != nil {
+		variables = convertVariables(definition.VariableDefinitions, model, clModel)
 	}
 	selection := convertSelection(root, definition.SelectionSet, model, clModel)
 
@@ -100,18 +165,21 @@ func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
 			SelectionSet: selection,
+			Variables:    variables,
 		})
 	} else if definition.Operation == "subscription" {
 		model.Subscriptions = append(model.Subscriptions, &Operation{
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
 			SelectionSet: selection,
+			Variables:    variables,
 		})
 	} else {
 		model.Queries = append(model.Queries, &Operation{
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
 			SelectionSet: selection,
+			Variables:    variables,
 		})
 	}
 
@@ -216,6 +284,30 @@ func convertType(field *ast.Field, ff SchemaType, model *Model, clModel *ClientM
 	}
 }
 
+func convertInputType(ff ast.Type, model *Model, clModel *ClientModel) Type {
+	if ff.GetKind() == "NonNull" {
+		nn := ff.(*ast.NonNull)
+		return NotNull{convertInputType(nn.Type, model, clModel)}
+	} else if ff.GetKind() == "Named" {
+		nn := ff.(*ast.Named)
+		tp := Find(clModel.Schema.Types, nn.Name.Value)
+		if tp.Kind == "SCALAR" {
+			return Scalar{tp.Name}
+		} else if tp.Kind == "ENUM" {
+			return Enum{tp.Name}
+		} else if tp.Kind == "INPUT_OBJECT" {
+			return Input{tp.Name}
+		} else {
+			panic("Unexpected Named type: " + tp.Kind)
+		}
+	} else if ff.GetKind() == "List" {
+		ln := ff.(*ast.List)
+		return List{convertInputType(ln.Type, model, clModel)}
+	} else {
+		panic("Unexpected input type kind: " + ff.GetKind())
+	}
+}
+
 func convertSelection(typeName string, selection *ast.SelectionSet, model *Model, clModel *ClientModel) *SelectionSet {
 	if selection == nil {
 		return nil
@@ -235,6 +327,7 @@ func convertSelection(typeName string, selection *ast.SelectionSet, model *Model
 			if f.Alias != nil {
 				alias = f.Alias.Value
 			}
+			var arguments []*Argument
 			var typ Type
 			if f.Name.Value == "__typename" {
 				// Special Case
@@ -242,8 +335,16 @@ func convertSelection(typeName string, selection *ast.SelectionSet, model *Model
 			} else {
 				ff := FindField(tp.Fields, f.Name.Value)
 				typ = convertType(f, ff.Type, model, clModel)
+				if f.Arguments != nil {
+					arguments = make([]*Argument, 0)
+					for i := range f.Arguments {
+						arg := f.Arguments[i]
+						vl := convertValue(arg.Value)
+						arguments = append(arguments, &Argument{Name: arg.Name.Value, Value: vl})
+					}
+				}
 			}
-			fld := &SelectionField{Name: f.Name.Value, Alias: alias, Type: typ}
+			fld := &SelectionField{Name: f.Name.Value, Alias: alias, Type: typ, Arguments: arguments}
 			fields = append(fields, fld)
 		} else if ss.GetKind() == "InlineFragment" {
 			fs := ss.(*ast.InlineFragment)
