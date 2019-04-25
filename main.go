@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/openland/baikonur/codegen"
 	"github.com/openland/baikonur/il"
 	"os"
 	"path/filepath"
@@ -31,6 +32,5 @@ func main() {
 		panic(err)
 	}
 	model := il.LoadModel("tests/schema.json", files)
-	print(len(model.Fragments))
-	// generate(model)
+	codegen.GenerateKotlin(model)
 }

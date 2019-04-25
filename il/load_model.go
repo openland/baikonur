@@ -6,6 +6,7 @@ import (
 	"github.com/graphql-go/graphql/language/parser"
 	"github.com/graphql-go/graphql/language/source"
 	"io/ioutil"
+	"sort"
 	"strconv"
 )
 
@@ -331,7 +332,7 @@ func convertSelection(typeName string, selection *ast.SelectionSet, model *Model
 			var typ Type
 			if f.Name.Value == "__typename" {
 				// Special Case
-				typ = Scalar{"String"}
+				typ = NotNull{Scalar{"String"}}
 			} else {
 				ff := FindField(tp.Fields, f.Name.Value)
 				typ = convertType(f, ff.Type, model, clModel)
@@ -364,6 +365,7 @@ func convertSelection(typeName string, selection *ast.SelectionSet, model *Model
 // Load Model from files
 
 func LoadModel(schemaPath string, files []string) *Model {
+	sort.Strings(files)
 
 	// Read Schema and Queries
 	schemaBody, err := ioutil.ReadFile(schemaPath)

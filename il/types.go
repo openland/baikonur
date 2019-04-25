@@ -1,7 +1,7 @@
 package il
 
 type Type interface {
-	getKind() string
+	GetKind() string
 }
 
 type NotNull struct {
@@ -26,12 +26,12 @@ type Object struct {
 }
 
 type Union struct {
-	Name string
+	Name         string
 	SelectionSet *SelectionSet
 }
 
 type Interface struct {
-	Name string
+	Name         string
 	SelectionSet *SelectionSet
 }
 
@@ -39,34 +39,34 @@ type Enum struct {
 	Name string
 }
 
-func (NotNull) getKind() string {
+func (NotNull) GetKind() string {
 	return "NotNull"
 }
 
-func (List) getKind() string {
+func (List) GetKind() string {
 	return "List"
 }
 
-func (Input) getKind() string {
+func (Input) GetKind() string {
 	return "Input"
 }
 
-func (Scalar) getKind() string {
+func (Scalar) GetKind() string {
 	return "Scalar"
 }
 
-func (Object) getKind() string {
+func (Object) GetKind() string {
 	return "Object"
 }
 
-func (Union) getKind() string {
+func (Union) GetKind() string {
 	return "Union"
 }
 
-func (Interface) getKind() string {
+func (Interface) GetKind() string {
 	return "Interface"
 }
 
-func (Enum) getKind() string {
+func (Enum) GetKind() string {
 	return "Enum"
 }
