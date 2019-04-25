@@ -29,11 +29,18 @@ type SchemaField struct {
 }
 
 type Schema struct {
-	Types []SchemaType `json:"types"`
+	QueryType        *SchemaRootType `json:"queryType"`
+	MutationType     *SchemaRootType `json:"mutationType"`
+	SubscriptionType *SchemaRootType `json:"subscriptionType"`
+	Types            []SchemaType    `json:"types"`
 }
 
 type SchemaRoot struct {
 	Schema Schema `json:"__schema"`
+}
+
+type SchemaRootType struct {
+	Name string `json:"name"`
 }
 
 // Process All Fragment Dependencies
@@ -75,6 +82,39 @@ func prepareFragment(fragment *ast.FragmentDefinition, model *Model, clModel *Cl
 	}
 
 	model.Fragments = append(model.Fragments, fr)
+}
+
+// Operations
+
+func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel *ClientModel) {
+	root := clModel.Schema.QueryType.Name
+	if definition.Operation == "mutation" {
+		root = clModel.Schema.MutationType.Name
+	} else if definition.Operation == "subscription" {
+		root = clModel.Schema.SubscriptionType.Name
+	}
+	selection := convertSelection(root, definition.SelectionSet, model, clModel)
+
+	if definition.Operation == "mutation" {
+		model.Mutations = append(model.Mutations, &Operation{
+			Type:         definition.Operation,
+			Name:         definition.Name.Value,
+			SelectionSet: selection,
+		})
+	} else if definition.Operation == "subscription" {
+		model.Subscriptions = append(model.Subscriptions, &Operation{
+			Type:         definition.Operation,
+			Name:         definition.Name.Value,
+			SelectionSet: selection,
+		})
+	} else {
+		model.Queries = append(model.Queries, &Operation{
+			Type:         definition.Operation,
+			Name:         definition.Name.Value,
+			SelectionSet: selection,
+		})
+	}
+
 }
 
 // Collect Dependencies
@@ -223,6 +263,8 @@ func convertSelection(typeName string, selection *ast.SelectionSet, model *Model
 // Load Model from files
 
 func LoadModel(schemaPath string, files []string) *Model {
+
+	// Read Schema and Queries
 	schemaBody, err := ioutil.ReadFile(schemaPath)
 	if err != nil {
 		panic(err)
@@ -272,9 +314,20 @@ func LoadModel(schemaPath string, files []string) *Model {
 			}
 		}
 	}
+
+	// Build IL model
 	ilModel := NewModel()
 	for _, v := range model.Fragments {
 		prepareFragment(v, ilModel, model)
+	}
+	for _, v := range model.Queries {
+		prepareOperation(v, ilModel, model)
+	}
+	for _, v := range model.Mutations {
+		prepareOperation(v, ilModel, model)
+	}
+	for _, v := range model.Subscriptions {
+		prepareOperation(v, ilModel, model)
 	}
 	return ilModel
 }

@@ -3,12 +3,15 @@ package il
 // Model
 
 type Model struct {
-	Fragments    []*Fragment
-	FragmentsMap map[string]*Fragment
+	Fragments     []*Fragment
+	FragmentsMap  map[string]*Fragment
+	Queries       []*Operation
+	Mutations     []*Operation
+	Subscriptions []*Operation
 }
 
 func NewModel() *Model {
-	return &Model{Fragments: make([]*Fragment, 0), FragmentsMap: make(map[string]*Fragment)}
+	return &Model{Fragments: make([]*Fragment, 0), FragmentsMap: make(map[string]*Fragment), Queries: make([]*Operation, 0), Mutations: make([]*Operation, 0), Subscriptions: make([]*Operation, 0)}
 }
 
 // Fragments
@@ -43,4 +46,11 @@ type SelectionField struct {
 	Alias     string
 	Type      Type
 	Selection *SelectionSet
+}
+
+// Operation
+type Operation struct {
+	Type         string
+	Name         string
+	SelectionSet *SelectionSet
 }
