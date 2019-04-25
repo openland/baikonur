@@ -1,10 +1,7 @@
 package main
 
 import (
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
-	"io/ioutil"
+	"github.com/openland/baikonur/il"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,43 +30,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	model := &ClientModel{
-		Fragments:     make(map[string]*ast.FragmentDefinition),
-		Queries:       make(map[string]*ast.OperationDefinition),
-		Mutations:     make(map[string]*ast.OperationDefinition),
-		Subscriptions: make(map[string]*ast.OperationDefinition),
-	}
-	for i := 0; i < len(files); i++ {
-		path := files[i]
-		body, err := ioutil.ReadFile(path)
-		if err != nil {
-			panic(err)
-		}
-		src := source.NewSource(&source.Source{Body: body})
-		parsed, err := parser.Parse(parser.ParseParams{Source: src})
-		if err != nil {
-			panic(err)
-		}
-		for i := 0; i < len(parsed.Definitions); i++ {
-			node := parsed.Definitions[i]
-			if node.GetKind() == "OperationDefinition" {
-				op := node.(*ast.OperationDefinition)
-				if op.Operation == "query" {
-					model.Queries[op.Name.Value] = op
-				} else if op.Operation == "mutation" {
-					model.Mutations[op.Name.Value] = op
-				} else if op.Operation == "subscription" {
-					model.Subscriptions[op.Name.Value] = op
-				} else {
-					panic("Unknown operation: " + op.Operation)
-				}
-			} else if node.GetKind() == "FragmentDefinition" {
-				fr := node.(*ast.FragmentDefinition)
-				model.Fragments[fr.Name.Value] = fr
-			} else {
-				panic("Unknown node: " + node.GetKind())
-			}
-		}
-	}
-	generate(model)
+	model := il.LoadModel("tests/schema.json", files)
+	print(len(model.Fragments))
+	// generate(model)
 }

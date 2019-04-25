@@ -34,31 +34,29 @@ func generateSelectionSetNormalizer(model *ClientModel, s *ast.SelectionSet, out
 					} else if arg.Value.GetKind() == "EnumValue" {
 						argumentKey = arg.Value.(*ast.EnumValue).Value
 					} else if arg.Value.GetKind() == "ListValue" {
-						//
-						argumentKey = "?"
+						panic("List Value is not supported yet")
 					} else if arg.Value.GetKind() == "ObjectValue" {
-						//
-						argumentKey = "?"
+						panic("Object Value is not supported yet")
 					} else if arg.Value.GetKind() == "Variable" {
-						//
-						argumentKey = "?"
+						v := arg.Value.(*ast.Variable)
+						argumentKey = "scope.argumentKey(\"" + v.Name.Value + "\")"
 					} else {
 						panic("Unknown value kind: " + arg.Value.GetKind())
 					}
-					argkeys = append(argkeys, arg.Name.Value+":"+argumentKey)
+					argkeys = append(argkeys, "\""+arg.Name.Value+":\"+"+argumentKey)
 				}
 				sort.Strings(argkeys)
-				storeName = f.Name.Value + "(" + strings.Join(argkeys, ",") + ")"
+				storeName = "\"" + f.Name.Value + "(\"+" + strings.Join(argkeys, "+ \",\" + ") + "+\")\""
 			}
 			if f.SelectionSet != nil {
-				output.WriteLine("if (scope.push(\"" + responseName + "\", \"" + storeName + "\")) {")
+				output.WriteLine("if (scope.push(\"" + responseName + "\", " + storeName + ")) {")
 				output.IndentAdd()
 				generateSelectionSetNormalizer(model, f.SelectionSet, output)
 				output.WriteLine("scope.pop()")
 				output.IndentRemove()
 				output.WriteLine("}")
 			} else {
-				output.WriteLine("scope.output(\"" + storeName + "\", scope.input(\"" + responseName + "\"))")
+				output.WriteLine("scope.output(" + storeName + ", scope.input(\"" + responseName + "\"))")
 			}
 		} else if s.GetKind() == "FragmentSpread" {
 			f := s.(*ast.FragmentSpread)
