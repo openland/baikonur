@@ -1,12 +1,11 @@
-query RoomSearch($page: Int, $query: String, $sort: String) {
-  items: betaRoomSearch(first: 25, page: $page, query: $query, sort: $sort) {
+query RoomSearch {
+  items: betaRoomSearch(first: 150) {
     __typename
     edges {
       __typename
       cursor
       node {
         __typename
-        ... on SharedRoom {
           id
           isChannel
           kind
@@ -19,7 +18,6 @@ query RoomSearch($page: Int, $query: String, $sort: String) {
           }
           photo
           title
-        }
       }
     }
     pageInfo {

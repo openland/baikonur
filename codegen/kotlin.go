@@ -29,7 +29,7 @@ func generateReadListScalar(tp string, output *Output) {
 func newScope(output *Output, field *il.SelectionField) {
 	output.NextScope()
 	output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope" + strconv.FormatInt(output.ParentScope(), 10) +
-		".child(\"" + field.Alias + "\")")
+		".child(\"" + field.Alias + "\", \"" + field.Name + "\")")
 }
 
 func newScopeInList(output *Output) {
@@ -41,7 +41,7 @@ func newScopeInList(output *Output) {
 func newListScope(output *Output, field *il.SelectionField) {
 	output.NextScope()
 	output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope" + strconv.FormatInt(output.ParentScope(), 10) +
-		".childList(\"" + field.Alias + "\")")
+		".childList(\"" + field.Alias + "\", \"" + field.Name + "\")")
 }
 
 func newListScopeInList(output *Output) {
@@ -76,7 +76,7 @@ func generateListNormalizer(level int64, fld *il.SelectionField, list il.List, o
 				panic("Unsupported scalar: " + scalar.Name)
 			}
 		} else if inner.GetKind() == "Object" || inner.GetKind() == "Union" || inner.GetKind() == "Interface" {
-			output.WriteLine(scope + ".assertObject(i, \"" + fld.Alias + "\")")
+			output.WriteLine(scope + ".assertObject(i)")
 			newScopeInList(output)
 			if inner.GetKind() == "Object" {
 				obj := inner.(il.Object)
