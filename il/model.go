@@ -53,6 +53,7 @@ type SelectionField struct {
 type Operation struct {
 	Type         string
 	Name         string
+	Body         string
 	SelectionSet *SelectionSet
 	Variables    *Variables
 }

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type ClientModel struct {
@@ -16,6 +17,7 @@ type ClientModel struct {
 	Subscriptions map[string]*ast.OperationDefinition
 	Queries       map[string]*ast.OperationDefinition
 	Mutations     map[string]*ast.OperationDefinition
+	Sources       map[string]string
 }
 
 type SchemaType struct {
@@ -161,10 +163,33 @@ func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel
 	}
 	selection := convertSelection(root, definition.SelectionSet, model, clModel)
 
+	dependencies := collectDependencies(definition.SelectionSet, model, clModel)
+
+	body := clModel.Sources[definition.Name.Value]
+	for _, d := range dependencies {
+		body = body + " " + clModel.Sources[d]
+	}
+	body = strings.Replace(body, "$", "\\$", -1)
+	body = strings.Replace(body, "\n", " ", -1)
+	for strings.Contains(body, "  ") {
+		body = strings.Replace(body, "  ", " ", -1)
+	}
+	body = strings.Replace(body, ": ", ":", -1)
+	body = strings.Replace(body, ", ", ",", -1)
+	body = strings.Replace(body, "( ", "(", -1)
+	body = strings.Replace(body, " (", "(", -1)
+	body = strings.Replace(body, ") ", ")", -1)
+	body = strings.Replace(body, " ) ", ")", -1)
+	body = strings.Replace(body, "{ ", "{", -1)
+	body = strings.Replace(body, " {", "{", -1)
+	body = strings.Replace(body, "} ", "}", -1)
+	body = strings.Replace(body, " } ", "}", -1)
+
 	if definition.Operation == "mutation" {
 		model.Mutations = append(model.Mutations, &Operation{
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
+			Body:         body,
 			SelectionSet: selection,
 			Variables:    variables,
 		})
@@ -172,6 +197,7 @@ func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel
 		model.Subscriptions = append(model.Subscriptions, &Operation{
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
+			Body:         body,
 			SelectionSet: selection,
 			Variables:    variables,
 		})
@@ -179,6 +205,7 @@ func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel
 		model.Queries = append(model.Queries, &Operation{
 			Type:         definition.Operation,
 			Name:         definition.Name.Value,
+			Body:         body,
 			SelectionSet: selection,
 			Variables:    variables,
 		})
@@ -384,6 +411,7 @@ func LoadModel(schemaPath string, files []string) *Model {
 		Queries:       make(map[string]*ast.OperationDefinition),
 		Mutations:     make(map[string]*ast.OperationDefinition),
 		Subscriptions: make(map[string]*ast.OperationDefinition),
+		Sources:       make(map[string]string),
 	}
 	for i := 0; i < len(files); i++ {
 		path := files[i]
@@ -409,9 +437,11 @@ func LoadModel(schemaPath string, files []string) *Model {
 				} else {
 					panic("Unknown operation: " + op.Operation)
 				}
+				model.Sources[op.Name.Value] = string(body[op.Loc.Start:op.Loc.End])
 			} else if node.GetKind() == "FragmentDefinition" {
 				fr := node.(*ast.FragmentDefinition)
 				model.Fragments[fr.Name.Value] = fr
+				model.Sources[fr.Name.Value] = string(body[fr.Loc.Start:fr.Loc.End])
 			} else {
 				panic("Unknown node: " + node.GetKind())
 			}

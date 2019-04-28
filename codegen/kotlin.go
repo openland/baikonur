@@ -228,10 +228,12 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			} else if inner.GetKind() == "List" {
 				output.WriteLine("if (" + scope + ".assertList(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
+				storeKey := storeKey(fld, output)
 				newListScope(fld, output)
 				nextLevel++
 				generateListNormalizer(nextLevel, fld, inner.(il.List), output)
-				// output.WriteLine(scope + ".completed()")
+				listScope := "scope" + strconv.FormatInt(output.GetScope(), 10)
+				output.WriteLine(scope + ".set(" + storeKey + ", " + listScope + ".completed())")
 				output.ScopePop()
 				output.IndentRemove()
 				output.WriteLine("}")
@@ -262,6 +264,7 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			} else if fld.Type.GetKind() == "Object" || fld.Type.GetKind() == "Union" || fld.Type.GetKind() == "Interface" {
 				output.WriteLine("if (" + scope + ".hasKey(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
+				storeKey := storeKey(fld, output)
 				newScope(fld, output)
 				if fld.Type.GetKind() == "Object" {
 					obj := fld.Type.(il.Object)
@@ -275,14 +278,23 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 				}
 				output.IndentRemove()
 				output.ScopePop()
+				output.WriteLine("} else {")
+				output.IndentAdd()
+				output.WriteLine(scope + ".setNull(" + storeKey + ")")
+				output.IndentRemove()
 				output.WriteLine("}")
 			} else if fld.Type.GetKind() == "List" {
 				output.WriteLine("if (" + scope + ".hasKey(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
+				storeKey := storeKey(fld, output)
 				newListScope(fld, output)
 				nextLevel++
 				generateListNormalizer(nextLevel, fld, fld.Type.(il.List), output)
 				output.ScopePop()
+				output.IndentRemove()
+				output.WriteLine("} else {")
+				output.IndentAdd()
+				output.WriteLine(scope + ".setNull(" + storeKey + ")")
 				output.IndentRemove()
 				output.WriteLine("}")
 			} else if fld.Type.GetKind() == "Enum" {
@@ -307,6 +319,9 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 func GenerateKotlin(model *il.Model) {
 	output := NewOutput()
 	output.WriteLine("package com.openland.soyuz.gen")
+	output.WriteLine("")
+	output.WriteLine("import com.openland.soyuz.store.RecordSet")
+	output.WriteLine("import kotlinx.serialization.json.JsonObject")
 	output.WriteLine("")
 	for _, f := range model.Fragments {
 		output.NextScope()
@@ -348,6 +363,32 @@ func GenerateKotlin(model *il.Model) {
 		output.IndentRemove()
 		output.WriteLine("}")
 	}
+
+	output.WriteLine("")
+	output.WriteLine("object Operations {")
+	output.IndentAdd()
+	for _, f := range model.Queries {
+		output.WriteLine("val " + f.Name + " = object: OperationDefinition {")
+		output.IndentAdd()
+		output.WriteLine("override val kind = OperationKind.QUERY")
+		output.WriteLine("override val body = \"" + f.Body + "\"")
+		output.WriteLine("override fun normalizeResponse(response: JsonObject): RecordSet {")
+		output.IndentAdd()
+		output.WriteLine("val collection = NormalizedCollection()")
+		output.WriteLine("normalize" + f.Name + "(Scope(\"ROOT_QUERY\", collection, response))")
+		output.WriteLine("return collection.build()")
+		output.IndentRemove()
+		output.WriteLine("}")
+		//override fun normalizeResponse(response: Scope) {
+		//	val collection = NormalizedCollection()
+		//	normalizeAccount(Scope("ROOT_QUERY", collection, response))
+		//	return collection.build()
+		//}
+		output.IndentRemove()
+		output.WriteLine("}")
+	}
+	output.IndentRemove()
+	output.WriteLine("}")
 
 	ioutil.WriteFile("/Users/steve/Develop/soyuz/src/commonMain/kotlin/com.openland.soyuz/gen/Generated.kt",
 		[]byte(output.String()), 0644)
