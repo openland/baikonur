@@ -420,16 +420,48 @@ func LoadModel(schemaPath string, files []string) *Model {
 
 	// Build IL model
 	ilModel := NewModel()
-	for _, v := range model.Fragments {
+
+	// Fragments
+	keys := make([]string, 0)
+	for k := range model.Fragments {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := model.Fragments[k]
 		prepareFragment(v, ilModel, model)
 	}
-	for _, v := range model.Queries {
+
+	// Queries
+	keys = make([]string, 0)
+	for k := range model.Queries {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := model.Queries[k]
 		prepareOperation(v, ilModel, model)
 	}
-	for _, v := range model.Mutations {
+
+	// Mutations
+	keys = make([]string, 0)
+	for k := range model.Mutations {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := model.Mutations[k]
 		prepareOperation(v, ilModel, model)
 	}
-	for _, v := range model.Subscriptions {
+
+	// Subscriptions
+	keys = make([]string, 0)
+	for k := range model.Subscriptions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := model.Subscriptions[k]
 		prepareOperation(v, ilModel, model)
 	}
 	return ilModel

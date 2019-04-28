@@ -4,16 +4,69 @@ import (
 	"github.com/openland/baikonur/il"
 	"io/ioutil"
 	"strconv"
+	"strings"
 )
 
-func generateReadScalar(alias string, tp string, name string, output *Output) {
+func formatValue(arg il.Value, output *Output) string {
 	scope := "scope" + strconv.FormatInt(output.GetScope(), 10)
-	output.WriteLine(scope + ".set(\"" + name + "\", " + scope + ".read" + tp + "(\"" + alias + "\"))")
+	if arg.GetKind() == "IntValue" {
+		return "\"" + strconv.FormatInt(int64(arg.(il.IntValue).Int), 10) + "\""
+	} else if arg.GetKind() == "FloatValue" {
+		return "\"" + strconv.FormatFloat(arg.(il.FloatValue).Float, 'E', -1, 64) + "\""
+	} else if arg.GetKind() == "StringValue" {
+		return "\"" + arg.(il.StringValue).String + "\""
+	} else if arg.GetKind() == "BooleanValue" {
+		return "\"" + strconv.FormatBool(arg.(il.BooleanValue).Boolean) + "\""
+	} else if arg.GetKind() == "VariableValue" {
+		return scope + ".argumentKey(\"" + arg.(il.VariableValue).Name + "\")"
+	} else if arg.GetKind() == "ListValue" {
+		inner := make([]string, 0)
+		for _, a := range arg.(il.ListValue).Values {
+			inner = append(inner, formatValue(a, output))
+		}
+		if len(inner) == 0 {
+			return "\"[]\""
+		}
+		return "\"[\"+" + strings.Join(inner, "+\",\"+") + "+\"]\""
+	} else if arg.GetKind() == "EnumValue" {
+		return "\"" + arg.(il.EnumValue).String + "\""
+	} else if arg.GetKind() == "ObjectValue" {
+		inner := make([]string, 0)
+		for _, f := range arg.(il.ObjectValue).Fields {
+			inner = append(inner, "\""+f.Name+"\" to "+formatValue(f.Value, output))
+		}
+		return scope + ".formatObjectKey(" + strings.Join(inner, ",") + ")"
+	} else {
+		panic("Unsupported variable value: " + arg.GetKind())
+	}
 }
 
-func generateReadOptionalScalar(alias string, tp string, name string, output *Output) {
+func storeKey(field *il.SelectionField, output *Output) string {
 	scope := "scope" + strconv.FormatInt(output.GetScope(), 10)
-	output.WriteLine(scope + ".set(\"" + name + "\", " + scope + ".read" + tp + "Optional(\"" + alias + "\"))")
+	if len(field.Arguments) > 0 {
+		argsString := make([]string, 0)
+		for _, a := range field.Arguments {
+			argsString = append(argsString, "\""+a.Name+"\" to "+formatValue(a.Value, output))
+		}
+		args := strings.Join(argsString, ",")
+		return "\"" + field.Name + "\" + " + scope + ".formatArguments(" + args + ")"
+	} else {
+		return "\"" + field.Name + "\""
+	}
+}
+
+func generateReadScalar(field *il.SelectionField, tp string, output *Output) {
+	scope := "scope" + strconv.FormatInt(output.GetScope(), 10)
+	storeKey := storeKey(field, output)
+	requestKey := field.Alias
+	output.WriteLine(scope + ".set(" + storeKey + ", " + scope + ".read" + tp + "(\"" + requestKey + "\"))")
+}
+
+func generateReadOptionalScalar(field *il.SelectionField, tp string, output *Output) {
+	scope := "scope" + strconv.FormatInt(output.GetScope(), 10)
+	storeKey := storeKey(field, output)
+	requestKey := field.Alias
+	output.WriteLine(scope + ".set(" + storeKey + ", " + scope + ".read" + tp + "Optional(\"" + requestKey + "\"))")
 }
 
 func generateReadOptionalListScalar(tp string, output *Output) {
@@ -26,10 +79,12 @@ func generateReadListScalar(tp string, output *Output) {
 	output.WriteLine(scope + ".next(" + scope + ".read" + tp + "(i))")
 }
 
-func newScope(output *Output, field *il.SelectionField) {
+func newScope(field *il.SelectionField, output *Output) {
+	storeKey := storeKey(field, output)
+	requestKey := field.Alias
 	output.NextScope()
 	output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope" + strconv.FormatInt(output.ParentScope(), 10) +
-		".child(\"" + field.Alias + "\", \"" + field.Name + "\")")
+		".child(\"" + requestKey + "\", " + storeKey + ")")
 }
 
 func newScopeInList(output *Output) {
@@ -38,10 +93,12 @@ func newScopeInList(output *Output) {
 		".child(i)")
 }
 
-func newListScope(output *Output, field *il.SelectionField) {
+func newListScope(field *il.SelectionField, output *Output) {
+	storeKey := storeKey(field, output)
+	requestKey := field.Alias
 	output.NextScope()
 	output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope" + strconv.FormatInt(output.ParentScope(), 10) +
-		".childList(\"" + field.Alias + "\", \"" + field.Name + "\")")
+		".childList(\"" + requestKey + "\", " + storeKey + ")")
 }
 
 func newListScopeInList(output *Output) {
@@ -130,7 +187,6 @@ func generateListNormalizer(level int64, fld *il.SelectionField, list il.List, o
 	}
 	output.IndentRemove()
 	output.WriteLine("}")
-	output.WriteLine(scope + ".completed()")
 }
 
 func generateNormalizer(set *il.SelectionSet, output *Output) {
@@ -141,23 +197,23 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			if inner.GetKind() == "Scalar" {
 				scalar := inner.(il.Scalar)
 				if scalar.Name == "String" {
-					generateReadScalar(fld.Alias, "String", fld.Name, output)
+					generateReadScalar(fld, "String", output)
 				} else if scalar.Name == "Int" {
-					generateReadScalar(fld.Alias, "Int", fld.Name, output)
+					generateReadScalar(fld, "Int", output)
 				} else if scalar.Name == "Float" {
-					generateReadScalar(fld.Alias, "Float", fld.Name, output)
+					generateReadScalar(fld, "Float", output)
 				} else if scalar.Name == "ID" {
-					generateReadScalar(fld.Alias, "String", fld.Name, output)
+					generateReadScalar(fld, "String", output)
 				} else if scalar.Name == "Boolean" {
-					generateReadScalar(fld.Alias, "Boolean", fld.Name, output)
+					generateReadScalar(fld, "Boolean", output)
 				} else if scalar.Name == "Date" {
-					generateReadScalar(fld.Alias, "String", fld.Name, output)
+					generateReadScalar(fld, "String", output)
 				} else {
 					panic("Unsupported scalar: " + scalar.Name)
 				}
 			} else if inner.GetKind() == "Object" || inner.GetKind() == "Union" || inner.GetKind() == "Interface" {
 				output.WriteLine(scope + ".assertObject(\"" + fld.Alias + "\")")
-				newScope(output, fld)
+				newScope(fld, output)
 				if inner.GetKind() == "Object" {
 					obj := inner.(il.Object)
 					generateNormalizer(obj.SelectionSet, output)
@@ -172,14 +228,15 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			} else if inner.GetKind() == "List" {
 				output.WriteLine("if (" + scope + ".assertList(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
-				newListScope(output, fld)
+				newListScope(fld, output)
 				nextLevel++
 				generateListNormalizer(nextLevel, fld, inner.(il.List), output)
+				// output.WriteLine(scope + ".completed()")
 				output.ScopePop()
 				output.IndentRemove()
 				output.WriteLine("}")
 			} else if inner.GetKind() == "Enum" {
-				generateReadScalar(fld.Alias, "String", fld.Name, output)
+				generateReadScalar(fld, "String", output)
 			} else {
 				panic("Unsupported type: " + inner.GetKind())
 			}
@@ -188,24 +245,24 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			if fld.Type.GetKind() == "Scalar" {
 				scalar := fld.Type.(il.Scalar)
 				if scalar.Name == "String" {
-					generateReadOptionalScalar(fld.Alias, "String", fld.Name, output)
+					generateReadOptionalScalar(fld, "String", output)
 				} else if scalar.Name == "Int" {
-					generateReadOptionalScalar(fld.Alias, "Int", fld.Name, output)
+					generateReadOptionalScalar(fld, "Int", output)
 				} else if scalar.Name == "Float" {
-					generateReadOptionalScalar(fld.Alias, "Float", fld.Name, output)
+					generateReadOptionalScalar(fld, "Float", output)
 				} else if scalar.Name == "ID" {
-					generateReadOptionalScalar(fld.Alias, "String", fld.Name, output)
+					generateReadOptionalScalar(fld, "String", output)
 				} else if scalar.Name == "Boolean" {
-					generateReadOptionalScalar(fld.Alias, "Boolean", fld.Name, output)
+					generateReadOptionalScalar(fld, "Boolean", output)
 				} else if scalar.Name == "Date" {
-					generateReadOptionalScalar(fld.Alias, "String", fld.Name, output)
+					generateReadOptionalScalar(fld, "String", output)
 				} else {
 					panic("Unsupported scalar: " + scalar.Name)
 				}
 			} else if fld.Type.GetKind() == "Object" || fld.Type.GetKind() == "Union" || fld.Type.GetKind() == "Interface" {
 				output.WriteLine("if (" + scope + ".hasKey(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
-				newScope(output, fld)
+				newScope(fld, output)
 				if fld.Type.GetKind() == "Object" {
 					obj := fld.Type.(il.Object)
 					generateNormalizer(obj.SelectionSet, output)
@@ -222,14 +279,14 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 			} else if fld.Type.GetKind() == "List" {
 				output.WriteLine("if (" + scope + ".hasKey(\"" + fld.Alias + "\")) {")
 				output.IndentAdd()
-				newListScope(output, fld)
+				newListScope(fld, output)
 				nextLevel++
 				generateListNormalizer(nextLevel, fld, fld.Type.(il.List), output)
 				output.ScopePop()
 				output.IndentRemove()
 				output.WriteLine("}")
 			} else if fld.Type.GetKind() == "Enum" {
-				generateReadOptionalScalar(fld.Alias, "String", fld.Name, output)
+				generateReadOptionalScalar(fld, "String", output)
 			} else {
 				panic("Unsupported type: " + fld.Type.GetKind())
 			}

@@ -1,7 +1,7 @@
 package il
 
 type Value interface {
-	getKind() string
+	GetKind() string
 }
 
 type IntValue struct {
@@ -41,34 +41,34 @@ type VariableValue struct {
 	Name string
 }
 
-func (IntValue) getKind() string {
+func (IntValue) GetKind() string {
 	return "IntValue"
 }
 
-func (BooleanValue) getKind() string {
+func (BooleanValue) GetKind() string {
 	return "BooleanValue"
 }
 
-func (StringValue) getKind() string {
+func (StringValue) GetKind() string {
 	return "StringValue"
 }
 
-func (FloatValue) getKind() string {
+func (FloatValue) GetKind() string {
 	return "FloatValue"
 }
 
-func (ListValue) getKind() string {
+func (ListValue) GetKind() string {
 	return "ListValue"
 }
 
-func (VariableValue) getKind() string {
+func (VariableValue) GetKind() string {
 	return "VariableValue"
 }
 
-func (EnumValue) getKind() string {
+func (EnumValue) GetKind() string {
 	return "EnumValue"
 }
 
-func (ObjectValue) getKind() string {
+func (ObjectValue) GetKind() string {
 	return "ObjectValue"
 }
