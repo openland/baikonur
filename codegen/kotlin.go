@@ -316,6 +316,71 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 	}
 }
 
+func outputType(tp il.Type, output *Output) {
+	if tp.GetKind() == "NotNull" {
+		inner := tp.(il.NotNull)
+		output.Append("notNull(")
+		outputType(inner.Inner, output)
+		output.Append(")")
+	} else if tp.GetKind() == "Scalar" {
+		scalar := tp.(il.Scalar)
+		output.Append("scalar(\"" + scalar.Name + "\")")
+	} else if tp.GetKind() == "Enum" {
+		output.Append("scalar(\"String\")")
+	} else if tp.GetKind() == "Object" || tp.GetKind() == "Union" || tp.GetKind() == "Interface" {
+		var set *il.SelectionSet
+		if tp.GetKind() == "Object" {
+			set = tp.(il.Object).SelectionSet
+		} else if tp.GetKind() == "Union" {
+			set = tp.(il.Union).SelectionSet
+		} else {
+			set = tp.(il.Interface).SelectionSet
+		}
+		output.IndentAdd()
+		output.Append("obj(listOf(")
+		output.IndentAdd()
+		isFirst := true
+		for _, s := range set.Fields {
+			if isFirst {
+				isFirst = false
+			} else {
+				output.Append(",")
+			}
+			output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", ")
+			outputType(s.Type, output)
+			output.Append(")")
+		}
+		output.IndentRemove()
+		output.WriteLine("))")
+		output.IndentRemove()
+		// return "obj(listOf(" + strings.Join(items, ",") + "))"
+	} else if tp.GetKind() == "List" {
+		output.Append("list(")
+		outputType((tp.(il.List)).Inner, output)
+		output.Append(")")
+	} else {
+		panic("Unsupported output type: " + tp.GetKind())
+	}
+}
+
+func generateSelector(set *il.SelectionSet, output *Output) {
+	output.WriteLine("listOf(")
+	output.IndentAdd()
+	isFirst := true
+	for _, fld := range set.Fields {
+		if isFirst {
+			isFirst = false
+		} else {
+			output.Append(",")
+		}
+		output.BeginLine("field(\"" + fld.Name + "\", \"" + fld.Alias + "\", ")
+		outputType(fld.Type, output)
+		output.EndLine(")")
+	}
+	output.IndentRemove()
+	output.WriteLine(")")
+}
+
 func GenerateKotlin(model *il.Model) {
 	output := NewOutput()
 	output.WriteLine("package com.openland.soyuz.gen")
@@ -323,12 +388,15 @@ func GenerateKotlin(model *il.Model) {
 	output.WriteLine("import com.openland.soyuz.store.RecordSet")
 	output.WriteLine("import kotlinx.serialization.json.JsonObject")
 	output.WriteLine("")
+
+	//
+	// Normalizers
+	//
+
 	for _, f := range model.Fragments {
 		output.NextScope()
-		output.WriteLine("fun normalize" + f.Name + "(scope: Scope) {")
+		output.WriteLine("fun normalize" + f.Name + "(scope" + strconv.FormatInt(output.GetScope(), 10) + ": Scope) {")
 		output.IndentAdd()
-		output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope")
-		output.WriteLine("scope" + strconv.FormatInt(output.GetScope(), 10) + ".assertType(\"" + f.TypeName + "\")")
 		generateNormalizer(f.SelectionSet, output)
 		output.IndentRemove()
 		output.WriteLine("}")
@@ -336,9 +404,8 @@ func GenerateKotlin(model *il.Model) {
 
 	for _, f := range model.Queries {
 		output.NextScope()
-		output.WriteLine("fun normalize" + f.Name + "(scope: Scope) {")
+		output.WriteLine("fun normalize" + f.Name + "(scope" + strconv.FormatInt(output.GetScope(), 10) + ": Scope) {")
 		output.IndentAdd()
-		output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope")
 		generateNormalizer(f.SelectionSet, output)
 		output.IndentRemove()
 		output.WriteLine("}")
@@ -346,9 +413,8 @@ func GenerateKotlin(model *il.Model) {
 
 	for _, f := range model.Mutations {
 		output.NextScope()
-		output.WriteLine("fun normalize" + f.Name + "(scope: Scope) {")
+		output.WriteLine("fun normalize" + f.Name + "(scope" + strconv.FormatInt(output.GetScope(), 10) + ": Scope) {")
 		output.IndentAdd()
-		output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope")
 		generateNormalizer(f.SelectionSet, output)
 		output.IndentRemove()
 		output.WriteLine("}")
@@ -356,13 +422,38 @@ func GenerateKotlin(model *il.Model) {
 
 	for _, f := range model.Subscriptions {
 		output.NextScope()
-		output.WriteLine("fun normalize" + f.Name + "(scope: Scope) {")
+		output.WriteLine("fun normalize" + f.Name + "(scope" + strconv.FormatInt(output.GetScope(), 10) + ": Scope) {")
 		output.IndentAdd()
-		output.WriteLine("val scope" + strconv.FormatInt(output.GetScope(), 10) + " = scope")
 		generateNormalizer(f.SelectionSet, output)
 		output.IndentRemove()
 		output.WriteLine("}")
 	}
+
+	//
+	// Selectors
+	//
+
+	for _, f := range model.Fragments {
+		output.NextScope()
+		output.WriteLine("val " + f.Name + "Selector = obj(")
+		output.IndentAdd()
+		generateSelector(f.SelectionSet, output)
+		output.IndentRemove()
+		output.WriteLine(")")
+	}
+
+	for _, f := range model.Queries {
+		output.NextScope()
+		output.WriteLine("val " + f.Name + "Selector = obj(")
+		output.IndentAdd()
+		generateSelector(f.SelectionSet, output)
+		output.IndentRemove()
+		output.WriteLine(")")
+	}
+
+	//
+	// Operations
+	//
 
 	output.WriteLine("")
 	output.WriteLine("object Operations {")
@@ -370,6 +461,7 @@ func GenerateKotlin(model *il.Model) {
 	for _, f := range model.Queries {
 		output.WriteLine("val " + f.Name + " = object: OperationDefinition {")
 		output.IndentAdd()
+		output.WriteLine("override val name = \"" + f.Name + "\"")
 		output.WriteLine("override val kind = OperationKind.QUERY")
 		output.WriteLine("override val body = \"" + f.Body + "\"")
 		output.WriteLine("override fun normalizeResponse(response: JsonObject): RecordSet {")
@@ -379,11 +471,6 @@ func GenerateKotlin(model *il.Model) {
 		output.WriteLine("return collection.build()")
 		output.IndentRemove()
 		output.WriteLine("}")
-		//override fun normalizeResponse(response: Scope) {
-		//	val collection = NormalizedCollection()
-		//	normalizeAccount(Scope("ROOT_QUERY", collection, response))
-		//	return collection.build()
-		//}
 		output.IndentRemove()
 		output.WriteLine("}")
 	}
