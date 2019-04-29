@@ -316,6 +316,19 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 	}
 }
 
+func inputValue(value il.Value) string {
+	if value.GetKind() == "IntValue" {
+		return "i(" + strconv.FormatInt(int64(value.(il.IntValue).Int), 10) + ")"
+	} else if value.GetKind() == "StringValue" {
+		return "s(\"" + value.(il.StringValue).String + "\")"
+	} else if value.GetKind() == "VariableValue" {
+		return "reference(\"" + value.(il.VariableValue).Name + "\")"
+	}
+
+	// TODO: Implement all types
+	panic("Unexpected input type: " + value.GetKind())
+}
+
 func outputSelectors(set *il.SelectionSet, output *Output) {
 	output.Append("obj(listOf(")
 	output.IndentAdd()
@@ -326,7 +339,15 @@ func outputSelectors(set *il.SelectionSet, output *Output) {
 		} else {
 			output.Append(",")
 		}
-		output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", ")
+		if len(s.Arguments) > 0 {
+			args := make([]string, 0)
+			for _, a := range s.Arguments {
+				args = append(args, "\""+a.Name+"\" to "+inputValue(a.Value)+"")
+			}
+			output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", mapOf(" + strings.Join(args, ", ") + "), ")
+		} else {
+			output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", ")
+		}
 		outputType(s.Type, output)
 		output.Append(")")
 	}
@@ -385,11 +406,9 @@ func outputType(tp il.Type, output *Output) {
 }
 
 func generateSelector(set *il.SelectionSet, output *Output) {
-	// output.WriteLine("listOf(")
 	output.IndentAdd()
 	outputSelectors(set, output)
 	output.IndentRemove()
-	// output.WriteLine(")")
 }
 
 func GenerateKotlin(model *il.Model) {
@@ -474,6 +493,7 @@ func GenerateKotlin(model *il.Model) {
 		output.WriteLine("override val name = \"" + f.Name + "\"")
 		output.WriteLine("override val kind = OperationKind.QUERY")
 		output.WriteLine("override val body = \"" + f.Body + "\"")
+		output.WriteLine("override val selector = " + f.Name + "Selector")
 		output.WriteLine("override fun normalizeResponse(response: JsonObject): RecordSet {")
 		output.IndentAdd()
 		output.WriteLine("val collection = NormalizedCollection()")
