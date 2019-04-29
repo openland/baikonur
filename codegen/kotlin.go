@@ -316,6 +316,42 @@ func generateNormalizer(set *il.SelectionSet, output *Output) {
 	}
 }
 
+func outputSelectors(set *il.SelectionSet, output *Output) {
+	output.Append("obj(listOf(")
+	output.IndentAdd()
+	isFirst := true
+	for _, s := range set.Fields {
+		if isFirst {
+			isFirst = false
+		} else {
+			output.Append(",")
+		}
+		output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", ")
+		outputType(s.Type, output)
+		output.Append(")")
+	}
+	for _, fr := range set.Fragments {
+		if isFirst {
+			isFirst = false
+		} else {
+			output.Append(",")
+		}
+		output.WriteLine("fragment(\"" + fr.TypeName + "\", " + fr.Name + "Selector)")
+	}
+	for _, fr := range set.InlineFragments {
+		if isFirst {
+			isFirst = false
+		} else {
+			output.Append(",")
+		}
+		output.WriteLine("inline(\"" + fr.TypeName + "\", ")
+		outputSelectors(fr.Selection, output)
+		output.Append(")")
+	}
+	output.IndentRemove()
+	output.WriteLine("))")
+}
+
 func outputType(tp il.Type, output *Output) {
 	if tp.GetKind() == "NotNull" {
 		inner := tp.(il.NotNull)
@@ -337,23 +373,8 @@ func outputType(tp il.Type, output *Output) {
 			set = tp.(il.Interface).SelectionSet
 		}
 		output.IndentAdd()
-		output.Append("obj(listOf(")
-		output.IndentAdd()
-		isFirst := true
-		for _, s := range set.Fields {
-			if isFirst {
-				isFirst = false
-			} else {
-				output.Append(",")
-			}
-			output.WriteLine("field(\"" + s.Name + "\",\"" + s.Alias + "\", ")
-			outputType(s.Type, output)
-			output.Append(")")
-		}
+		outputSelectors(set, output)
 		output.IndentRemove()
-		output.WriteLine("))")
-		output.IndentRemove()
-		// return "obj(listOf(" + strings.Join(items, ",") + "))"
 	} else if tp.GetKind() == "List" {
 		output.Append("list(")
 		outputType((tp.(il.List)).Inner, output)
@@ -364,21 +385,11 @@ func outputType(tp il.Type, output *Output) {
 }
 
 func generateSelector(set *il.SelectionSet, output *Output) {
-	output.WriteLine("listOf(")
+	// output.WriteLine("listOf(")
 	output.IndentAdd()
-	isFirst := true
-	for _, fld := range set.Fields {
-		if isFirst {
-			isFirst = false
-		} else {
-			output.Append(",")
-		}
-		output.BeginLine("field(\"" + fld.Name + "\", \"" + fld.Alias + "\", ")
-		outputType(fld.Type, output)
-		output.EndLine(")")
-	}
+	outputSelectors(set, output)
 	output.IndentRemove()
-	output.WriteLine(")")
+	// output.WriteLine(")")
 }
 
 func GenerateKotlin(model *il.Model) {
@@ -435,20 +446,19 @@ func GenerateKotlin(model *il.Model) {
 
 	for _, f := range model.Fragments {
 		output.NextScope()
-		output.WriteLine("val " + f.Name + "Selector = obj(")
+		output.WriteLine("val " + f.Name + "Selector = ")
 		output.IndentAdd()
 		generateSelector(f.SelectionSet, output)
 		output.IndentRemove()
-		output.WriteLine(")")
+		output.WriteLine("")
 	}
 
 	for _, f := range model.Queries {
 		output.NextScope()
-		output.WriteLine("val " + f.Name + "Selector = obj(")
+		output.WriteLine("val " + f.Name + "Selector = ")
 		output.IndentAdd()
 		generateSelector(f.SelectionSet, output)
 		output.IndentRemove()
-		output.WriteLine(")")
 	}
 
 	//
