@@ -183,7 +183,7 @@ func prepareOperation(definition *ast.OperationDefinition, model *Model, clModel
 	body = strings.Replace(body, "{ ", "{", -1)
 	body = strings.Replace(body, " {", "{", -1)
 	body = strings.Replace(body, "} ", "}", -1)
-	body = strings.Replace(body, " } ", "}", -1)
+	body = strings.Replace(body, " }", "}", -1)
 
 	if definition.Operation == "mutation" {
 		model.Mutations = append(model.Mutations, &Operation{
